@@ -15,14 +15,13 @@
 # include <openssl/cmp.h>
 # include <openssl/pem.h>
 # include <openssl/rand.h>
-# include "crypto/x509.h" /* for x509_set0_libctx() and x509_dup_ex() */
 
 # include "../../crypto/cmp/cmp_local.h"
 # include "../testutil.h"
 
 # ifndef OPENSSL_NO_CMP
 #  define CMP_TEST_REFVALUE_LENGTH 15 /* arbitrary value */
-OSSL_CMP_MSG *load_pkimsg(const char *file);
+OSSL_CMP_MSG *load_pkimsg(const char *file, OSSL_LIB_CTX *libctx);
 int valid_asn1_encoding(const OSSL_CMP_MSG *msg);
 int STACK_OF_X509_cmp(const STACK_OF(X509) *sk1, const STACK_OF(X509) *sk2);
 int STACK_OF_X509_push1(STACK_OF(X509) *sk, X509 *cert);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2004-2021 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2004, EdelKey Project. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
@@ -203,7 +203,7 @@ int ssl_srp_server_param_with_username_intern(SSL *s, int *ad)
         (s->srp_ctx.s == NULL) || (s->srp_ctx.v == NULL))
         return SSL3_AL_FATAL;
 
-    if (RAND_priv_bytes_ex(s->ctx->libctx, b, sizeof(b)) <= 0)
+    if (RAND_priv_bytes_ex(s->ctx->libctx, b, sizeof(b), 0) <= 0)
         return SSL3_AL_FATAL;
     s->srp_ctx.b = BN_bin2bn(b, sizeof(b), NULL);
     OPENSSL_cleanse(b, sizeof(b));
@@ -420,7 +420,7 @@ int ssl_srp_calc_a_param_intern(SSL *s)
 {
     unsigned char rnd[SSL_MAX_MASTER_KEY_LENGTH];
 
-    if (RAND_priv_bytes_ex(s->ctx->libctx, rnd, sizeof(rnd)) <= 0)
+    if (RAND_priv_bytes_ex(s->ctx->libctx, rnd, sizeof(rnd), 0) <= 0)
         return 0;
     s->srp_ctx.a = BN_bin2bn(rnd, sizeof(rnd), s->srp_ctx.a);
     OPENSSL_cleanse(rnd, sizeof(rnd));

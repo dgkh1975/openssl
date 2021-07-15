@@ -25,14 +25,13 @@ static int gcm_cipher_internal(PROV_GCM_CTX *ctx, unsigned char *out,
                                size_t *padlen, const unsigned char *in,
                                size_t len);
 
-void gcm_initctx(void *provctx, PROV_GCM_CTX *ctx, size_t keybits,
-                 const PROV_GCM_HW *hw, size_t ivlen_min)
+void ossl_gcm_initctx(void *provctx, PROV_GCM_CTX *ctx, size_t keybits,
+                      const PROV_GCM_HW *hw)
 {
     ctx->pad = 1;
     ctx->mode = EVP_CIPH_GCM_MODE;
     ctx->taglen = UNINITIALISED_SIZET;
     ctx->tls_aad_len = UNINITIALISED_SIZET;
-    ctx->ivlen_min = ivlen_min;
     ctx->ivlen = (EVP_GCM_TLS_FIXED_IV_LEN + EVP_GCM_TLS_EXPLICIT_IV_LEN);
     ctx->keylen = keybits / 8;
     ctx->hw = hw;
@@ -40,7 +39,8 @@ void gcm_initctx(void *provctx, PROV_GCM_CTX *ctx, size_t keybits,
 }
 
 static int gcm_init(void *vctx, const unsigned char *key, size_t keylen,
-                    const unsigned char *iv, size_t ivlen, int enc)
+                    const unsigned char *iv, size_t ivlen,
+                    const OSSL_PARAM params[], int enc)
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
 
@@ -50,7 +50,7 @@ static int gcm_init(void *vctx, const unsigned char *key, size_t keylen,
     ctx->enc = enc;
 
     if (iv != NULL) {
-        if (ivlen < ctx->ivlen_min || ivlen > sizeof(ctx->iv)) {
+        if (ivlen == 0 || ivlen > sizeof(ctx->iv)) {
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_IV_LENGTH);
             return 0;
         }
@@ -64,21 +64,24 @@ static int gcm_init(void *vctx, const unsigned char *key, size_t keylen,
             ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);
             return 0;
         }
-        return ctx->hw->setkey(ctx, key, ctx->keylen);
+        if (!ctx->hw->setkey(ctx, key, ctx->keylen))
+            return 0;
     }
-    return 1;
+    return ossl_gcm_set_ctx_params(ctx, params);
 }
 
-int gcm_einit(void *vctx, const unsigned char *key, size_t keylen,
-              const unsigned char *iv, size_t ivlen)
+int ossl_gcm_einit(void *vctx, const unsigned char *key, size_t keylen,
+                   const unsigned char *iv, size_t ivlen,
+                   const OSSL_PARAM params[])
 {
-    return gcm_init(vctx, key, keylen, iv, ivlen, 1);
+    return gcm_init(vctx, key, keylen, iv, ivlen, params, 1);
 }
 
-int gcm_dinit(void *vctx, const unsigned char *key, size_t keylen,
-              const unsigned char *iv, size_t ivlen)
+int ossl_gcm_dinit(void *vctx, const unsigned char *key, size_t keylen,
+                   const unsigned char *iv, size_t ivlen,
+                   const OSSL_PARAM params[])
 {
-    return gcm_init(vctx, key, keylen, iv, ivlen, 0);
+    return gcm_init(vctx, key, keylen, iv, ivlen, params, 0);
 }
 
 /* increment counter (64-bit int) by 1 */
@@ -129,7 +132,7 @@ static int setivinv(PROV_GCM_CTX *ctx, unsigned char *in, size_t inl)
     return 1;
 }
 
-int gcm_get_ctx_params(void *vctx, OSSL_PARAM params[])
+int ossl_gcm_get_ctx_params(void *vctx, OSSL_PARAM params[])
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
     OSSL_PARAM *p;
@@ -216,12 +219,15 @@ int gcm_get_ctx_params(void *vctx, OSSL_PARAM params[])
     return 1;
 }
 
-int gcm_set_ctx_params(void *vctx, const OSSL_PARAM params[])
+int ossl_gcm_set_ctx_params(void *vctx, const OSSL_PARAM params[])
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
     const OSSL_PARAM *p;
     size_t sz;
     void *vp;
+
+    if (params == NULL)
+        return 1;
 
     p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TAG);
     if (p != NULL) {
@@ -287,8 +293,8 @@ int gcm_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     return 1;
 }
 
-int gcm_stream_update(void *vctx, unsigned char *out, size_t *outl,
-                      size_t outsize, const unsigned char *in, size_t inl)
+int ossl_gcm_stream_update(void *vctx, unsigned char *out, size_t *outl,
+                           size_t outsize, const unsigned char *in, size_t inl)
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
 
@@ -309,8 +315,8 @@ int gcm_stream_update(void *vctx, unsigned char *out, size_t *outl,
     return 1;
 }
 
-int gcm_stream_final(void *vctx, unsigned char *out, size_t *outl,
-                     size_t outsize)
+int ossl_gcm_stream_final(void *vctx, unsigned char *out, size_t *outl,
+                          size_t outsize)
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
     int i;
@@ -326,9 +332,9 @@ int gcm_stream_final(void *vctx, unsigned char *out, size_t *outl,
     return 1;
 }
 
-int gcm_cipher(void *vctx,
-               unsigned char *out, size_t *outl, size_t outsize,
-               const unsigned char *in, size_t inl)
+int ossl_gcm_cipher(void *vctx,
+                    unsigned char *out, size_t *outl, size_t outsize,
+                    const unsigned char *in, size_t inl)
 {
     PROV_GCM_CTX *ctx = (PROV_GCM_CTX *)vctx;
 
@@ -364,7 +370,7 @@ static int gcm_iv_generate(PROV_GCM_CTX *ctx, int offset)
         return 0;
 
     /* Use DRBG to generate random iv */
-    if (RAND_bytes_ex(ctx->libctx, ctx->iv + offset, sz) <= 0)
+    if (RAND_bytes_ex(ctx->libctx, ctx->iv + offset, sz, 0) <= 0)
         return 0;
     ctx->iv_state = IV_STATE_BUFFERED;
     ctx->iv_gen_rand = 1;
@@ -478,7 +484,7 @@ static int gcm_tls_iv_set_fixed(PROV_GCM_CTX *ctx, unsigned char *iv,
     if (len > 0)
         memcpy(ctx->iv, iv, len);
     if (ctx->enc
-        && RAND_bytes_ex(ctx->libctx, ctx->iv + len, ctx->ivlen - len) <= 0)
+        && RAND_bytes_ex(ctx->libctx, ctx->iv + len, ctx->ivlen - len, 0) <= 0)
             return 0;
     ctx->iv_gen = 1;
     ctx->iv_state = IV_STATE_BUFFERED;
@@ -553,4 +559,3 @@ err:
     *padlen = plen;
     return rv;
 }
-

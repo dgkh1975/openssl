@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -67,7 +67,7 @@ const DSA_METHOD *DSA_OpenSSL(void)
     return &openssl_dsa_meth;
 }
 
-DSA_SIG *dsa_do_sign_int(const unsigned char *dgst, int dlen, DSA *dsa)
+DSA_SIG *ossl_dsa_do_sign_int(const unsigned char *dgst, int dlen, DSA *dsa)
 {
     BIGNUM *kinv = NULL;
     BIGNUM *m, *blind, *blindm, *tmp;
@@ -132,7 +132,7 @@ DSA_SIG *dsa_do_sign_int(const unsigned char *dgst, int dlen, DSA *dsa)
     /* Generate a blinding value */
     do {
         if (!BN_priv_rand_ex(blind, BN_num_bits(dsa->params.q) - 1,
-                             BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY, ctx))
+                             BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY, 0, ctx))
             goto err;
     } while (BN_is_zero(blind));
     BN_set_flags(blind, BN_FLG_CONSTTIME);
@@ -185,7 +185,7 @@ DSA_SIG *dsa_do_sign_int(const unsigned char *dgst, int dlen, DSA *dsa)
 
 static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
 {
-    return dsa_do_sign_int(dgst, dlen, dsa);
+    return ossl_dsa_do_sign_int(dgst, dlen, dsa);
 }
 
 static int dsa_sign_setup_no_digest(DSA *dsa, BN_CTX *ctx_in,
@@ -250,7 +250,7 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
             if (!BN_generate_dsa_nonce(k, dsa->params.q, dsa->priv_key, dgst,
                                        dlen, ctx))
                 goto err;
-        } else if (!BN_priv_rand_range_ex(k, dsa->params.q, ctx))
+        } else if (!BN_priv_rand_range_ex(k, dsa->params.q, 0, ctx))
             goto err;
     } while (BN_is_zero(k));
 

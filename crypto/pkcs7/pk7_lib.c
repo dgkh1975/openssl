@@ -187,7 +187,8 @@ int PKCS7_set0_type_other(PKCS7 *p7, int type, ASN1_TYPE *other)
 
 int PKCS7_add_signer(PKCS7 *p7, PKCS7_SIGNER_INFO *psi)
 {
-    int i, j, nid;
+    int i, j;
+    ASN1_OBJECT *obj;
     X509_ALGOR *alg;
     STACK_OF(PKCS7_SIGNER_INFO) *signer_sk;
     STACK_OF(X509_ALGOR) *md_sk;
@@ -207,33 +208,41 @@ int PKCS7_add_signer(PKCS7 *p7, PKCS7_SIGNER_INFO *psi)
         return 0;
     }
 
-    nid = OBJ_obj2nid(psi->digest_alg->algorithm);
-
+    obj = psi->digest_alg->algorithm;
     /* If the digest is not currently listed, add it */
     j = 0;
     for (i = 0; i < sk_X509_ALGOR_num(md_sk); i++) {
         alg = sk_X509_ALGOR_value(md_sk, i);
-        if (OBJ_obj2nid(alg->algorithm) == nid) {
+        if (OBJ_cmp(obj, alg->algorithm) == 0) {
             j = 1;
             break;
         }
     }
     if (!j) {                   /* we need to add another algorithm */
+        int nid;
+
         if ((alg = X509_ALGOR_new()) == NULL
             || (alg->parameter = ASN1_TYPE_new()) == NULL) {
             X509_ALGOR_free(alg);
             ERR_raise(ERR_LIB_PKCS7, ERR_R_MALLOC_FAILURE);
             return 0;
         }
-        alg->algorithm = OBJ_nid2obj(nid);
+        /*
+         * If there is a constant copy of the ASN1 OBJECT in libcrypto, then
+         * use that.  Otherwise, use a dynamically duplicated copy
+         */
+        if ((nid = OBJ_obj2nid(obj)) != NID_undef)
+            alg->algorithm = OBJ_nid2obj(nid);
+        else
+            alg->algorithm = OBJ_dup(obj);
         alg->parameter->type = V_ASN1_NULL;
-        if (!sk_X509_ALGOR_push(md_sk, alg)) {
+        if (alg->algorithm == NULL || !sk_X509_ALGOR_push(md_sk, alg)) {
             X509_ALGOR_free(alg);
             return 0;
         }
     }
 
-    psi->ctx = pkcs7_get0_ctx(p7);
+    psi->ctx = ossl_pkcs7_get0_ctx(p7);
     if (!sk_PKCS7_SIGNER_INFO_push(signer_sk, psi))
         return 0;
     return 1;
@@ -257,7 +266,7 @@ int PKCS7_add_certificate(PKCS7 *p7, X509 *x509)
         return 0;
     }
 
-    return X509_add_cert_new(sk, x509, X509_ADD_FLAG_UP_REF);
+    return ossl_x509_add_cert_new(sk, x509, X509_ADD_FLAG_UP_REF);
 }
 
 int PKCS7_add_crl(PKCS7 *p7, X509_CRL *crl)
@@ -307,7 +316,7 @@ static int pkcs7_ecdsa_or_dsa_sign_verify_setup(PKCS7_SIGNER_INFO *si,
         hnid = OBJ_obj2nid(alg1->algorithm);
         if (hnid == NID_undef)
             return -1;
-        if (!OBJ_find_sigid_by_algs(&snid, hnid, EVP_PKEY_id(pkey)))
+        if (!OBJ_find_sigid_by_algs(&snid, hnid, EVP_PKEY_get_id(pkey)))
             return -1;
         X509_ALGOR_set0(alg2, OBJ_nid2obj(snid), V_ASN1_UNDEF, 0);
     }
@@ -353,7 +362,7 @@ int PKCS7_SIGNER_INFO_set(PKCS7_SIGNER_INFO *p7i, X509 *x509, EVP_PKEY *pkey,
 
     /* Set the algorithms */
 
-    X509_ALGOR_set0(p7i->digest_alg, OBJ_nid2obj(EVP_MD_type(dgst)),
+    X509_ALGOR_set0(p7i->digest_alg, OBJ_nid2obj(EVP_MD_get_type(dgst)),
                     V_ASN1_NULL, NULL);
 
     if (EVP_PKEY_is_a(pkey, "EC") || EVP_PKEY_is_a(pkey, "DSA"))
@@ -425,12 +434,12 @@ static STACK_OF(PKCS7_RECIP_INFO) *pkcs7_get_recipient_info(const PKCS7 *p7)
  * Set up the library context into any loaded structure that needs it.
  * i.e loaded X509 objects.
  */
-void pkcs7_resolve_libctx(PKCS7 *p7)
+void ossl_pkcs7_resolve_libctx(PKCS7 *p7)
 {
     int i;
-    const PKCS7_CTX *ctx = pkcs7_get0_ctx(p7);
-    OSSL_LIB_CTX *libctx = pkcs7_ctx_get0_libctx(ctx);
-    const char *propq = pkcs7_ctx_get0_propq(ctx);
+    const PKCS7_CTX *ctx = ossl_pkcs7_get0_ctx(p7);
+    OSSL_LIB_CTX *libctx = ossl_pkcs7_ctx_get0_libctx(ctx);
+    const char *propq = ossl_pkcs7_ctx_get0_propq(ctx);
     STACK_OF(PKCS7_RECIP_INFO) *rinfos = pkcs7_get_recipient_info(p7);
     STACK_OF(PKCS7_SIGNER_INFO) *sinfos = PKCS7_get_signer_info(p7);
     STACK_OF(X509) *certs = pkcs7_get_signer_certs(p7);
@@ -439,12 +448,12 @@ void pkcs7_resolve_libctx(PKCS7 *p7)
         return;
 
     for (i = 0; i < sk_X509_num(certs); i++)
-        x509_set0_libctx(sk_X509_value(certs, i), libctx, propq);
+        ossl_x509_set0_libctx(sk_X509_value(certs, i), libctx, propq);
 
     for (i = 0; i < sk_PKCS7_RECIP_INFO_num(rinfos); i++) {
         PKCS7_RECIP_INFO *ri = sk_PKCS7_RECIP_INFO_value(rinfos, i);
 
-        x509_set0_libctx(ri->cert, libctx, propq);
+        ossl_x509_set0_libctx(ri->cert, libctx, propq);
     }
 
     for (i = 0; i < sk_PKCS7_SIGNER_INFO_num(sinfos); i++) {
@@ -455,16 +464,47 @@ void pkcs7_resolve_libctx(PKCS7 *p7)
     }
 }
 
-const PKCS7_CTX *pkcs7_get0_ctx(const PKCS7 *p7)
+const PKCS7_CTX *ossl_pkcs7_get0_ctx(const PKCS7 *p7)
 {
     return p7 != NULL ? &p7->ctx : NULL;
 }
 
-OSSL_LIB_CTX *pkcs7_ctx_get0_libctx(const PKCS7_CTX *ctx)
+void ossl_pkcs7_set0_libctx(PKCS7 *p7, OSSL_LIB_CTX *ctx)
+{
+    p7->ctx.libctx = ctx;
+}
+
+int ossl_pkcs7_set1_propq(PKCS7 *p7, const char *propq)
+{
+    if (p7->ctx.propq != NULL) {
+        OPENSSL_free(p7->ctx.propq);
+        p7->ctx.propq = NULL;
+    }
+    if (propq != NULL) {
+        p7->ctx.propq = OPENSSL_strdup(propq);
+        if (p7->ctx.propq == NULL) {
+            ERR_raise(ERR_LIB_PROV, ERR_R_MALLOC_FAILURE);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int ossl_pkcs7_ctx_propagate(const PKCS7 *from, PKCS7 *to)
+{
+    ossl_pkcs7_set0_libctx(to, from->ctx.libctx);
+    if (!ossl_pkcs7_set1_propq(to, from->ctx.propq))
+        return 0;
+
+    ossl_pkcs7_resolve_libctx(to);
+    return 1;
+}
+
+OSSL_LIB_CTX *ossl_pkcs7_ctx_get0_libctx(const PKCS7_CTX *ctx)
 {
     return ctx != NULL ? ctx->libctx : NULL;
 }
-const char *pkcs7_ctx_get0_propq(const PKCS7_CTX *ctx)
+const char *ossl_pkcs7_ctx_get0_propq(const PKCS7_CTX *ctx)
 {
     return ctx != NULL ? ctx->propq : NULL;
 }
@@ -524,7 +564,7 @@ PKCS7_RECIP_INFO *PKCS7_add_recipient(PKCS7 *p7, X509 *x509)
         goto err;
     if (!PKCS7_add_recipient_info(p7, ri))
         goto err;
-    ri->ctx = pkcs7_get0_ctx(p7);
+    ri->ctx = ossl_pkcs7_get0_ctx(p7);
     return ri;
  err:
     PKCS7_RECIP_INFO_free(ri);
@@ -649,14 +689,14 @@ int PKCS7_set_cipher(PKCS7 *p7, const EVP_CIPHER *cipher)
     }
 
     /* Check cipher OID exists and has data in it */
-    i = EVP_CIPHER_type(cipher);
+    i = EVP_CIPHER_get_type(cipher);
     if (i == NID_undef) {
         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_CIPHER_HAS_NO_OBJECT_IDENTIFIER);
         return 0;
     }
 
     ec->cipher = cipher;
-    ec->ctx = pkcs7_get0_ctx(p7);
+    ec->ctx = ossl_pkcs7_get0_ctx(p7);
     return 1;
 }
 

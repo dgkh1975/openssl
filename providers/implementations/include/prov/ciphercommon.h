@@ -31,17 +31,15 @@ typedef struct prov_cipher_ctx_st PROV_CIPHER_CTX;
 typedef int (PROV_CIPHER_HW_FN)(PROV_CIPHER_CTX *dat, unsigned char *out,
                                 const unsigned char *in, size_t len);
 
-/* TODO(3.0): VERIFY ME */
-#define MAX_TLS_MAC_SIZE    48
-
 /* Internal flags that can be queried */
 #define PROV_CIPHER_FLAG_AEAD             0x0001
 #define PROV_CIPHER_FLAG_CUSTOM_IV        0x0002
 #define PROV_CIPHER_FLAG_CTS              0x0004
 #define PROV_CIPHER_FLAG_TLS1_MULTIBLOCK  0x0008
+#define PROV_CIPHER_FLAG_RAND_KEY         0x0010
 /* Internal flags that are only used within the provider */
-#define PROV_CIPHER_FLAG_VARIABLE_LENGTH  0x0010
-#define PROV_CIPHER_FLAG_INVERSE_CIPHER   0x0020
+#define PROV_CIPHER_FLAG_VARIABLE_LENGTH  0x0100
+#define PROV_CIPHER_FLAG_INVERSE_CIPHER   0x0200
 
 struct prov_cipher_ctx_st {
     block128_f block;
@@ -333,7 +331,8 @@ static const OSSL_PARAM name##_known_gettable_ctx_params[] = {                 \
 #define CIPHER_DEFAULT_GETTABLE_CTX_PARAMS_END(name)                           \
     OSSL_PARAM_END                                                             \
 };                                                                             \
-const OSSL_PARAM * name##_gettable_ctx_params(ossl_unused void *provctx)       \
+const OSSL_PARAM * name##_gettable_ctx_params(ossl_unused void *cctx,          \
+                                              ossl_unused void *provctx)       \
 {                                                                              \
     return name##_known_gettable_ctx_params;                                   \
 }
@@ -345,7 +344,8 @@ static const OSSL_PARAM name##_known_settable_ctx_params[] = {                 \
 #define CIPHER_DEFAULT_SETTABLE_CTX_PARAMS_END(name)                           \
     OSSL_PARAM_END                                                             \
 };                                                                             \
-const OSSL_PARAM * name##_settable_ctx_params(ossl_unused void *provctx)       \
+const OSSL_PARAM * name##_settable_ctx_params(ossl_unused void *cctx,          \
+                                              ossl_unused void *provctx)       \
 {                                                                              \
     return name##_known_settable_ctx_params;                                   \
 }
@@ -353,8 +353,9 @@ const OSSL_PARAM * name##_settable_ctx_params(ossl_unused void *provctx)       \
 int ossl_cipher_generic_initiv(PROV_CIPHER_CTX *ctx, const unsigned char *iv,
                                size_t ivlen);
 
-size_t fillblock(unsigned char *buf, size_t *buflen, size_t blocksize,
-                 const unsigned char **in, size_t *inlen);
-int trailingdata(unsigned char *buf, size_t *buflen, size_t blocksize,
-                 const unsigned char **in, size_t *inlen);
-
+size_t ossl_cipher_fillblock(unsigned char *buf, size_t *buflen,
+                             size_t blocksize,
+                             const unsigned char **in, size_t *inlen);
+int ossl_cipher_trailingdata(unsigned char *buf, size_t *buflen,
+                             size_t blocksize,
+                             const unsigned char **in, size_t *inlen);

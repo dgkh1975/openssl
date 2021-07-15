@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2006-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -13,7 +13,9 @@
 #include <openssl/objects.h>
 #include <openssl/evp.h>
 #include "crypto/bn.h"
-#include "crypto/asn1.h"
+#ifndef FIPS_MODULE
+# include "crypto/asn1.h"
+#endif
 #include "crypto/evp.h"
 #include "evp_local.h"
 
@@ -42,7 +44,7 @@ static int try_provided_check(EVP_PKEY_CTX *ctx, int selection, int checktype)
     return evp_keymgmt_validate(keymgmt, keydata, selection, checktype);
 }
 
-int EVP_PKEY_public_check(EVP_PKEY_CTX *ctx)
+static int evp_pkey_public_check_combined(EVP_PKEY_CTX *ctx, int checktype)
 {
     EVP_PKEY *pkey = ctx->pkey;
     int ok;
@@ -53,7 +55,7 @@ int EVP_PKEY_public_check(EVP_PKEY_CTX *ctx)
     }
 
     if ((ok = try_provided_check(ctx, OSSL_KEYMGMT_SELECT_PUBLIC_KEY,
-                                 OSSL_KEYMGMT_VALIDATE_FULL_CHECK)) != -1)
+                                 checktype)) != -1)
         return ok;
 
     if (pkey->type == EVP_PKEY_NONE)
@@ -74,6 +76,16 @@ int EVP_PKEY_public_check(EVP_PKEY_CTX *ctx)
  not_supported:
     ERR_raise(ERR_LIB_EVP, EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
     return -2;
+}
+
+int EVP_PKEY_public_check(EVP_PKEY_CTX *ctx)
+{
+    return evp_pkey_public_check_combined(ctx, OSSL_KEYMGMT_VALIDATE_FULL_CHECK);
+}
+
+int EVP_PKEY_public_check_quick(EVP_PKEY_CTX *ctx)
+{
+    return evp_pkey_public_check_combined(ctx, OSSL_KEYMGMT_VALIDATE_QUICK_CHECK);
 }
 
 static int evp_pkey_param_check_combined(EVP_PKEY_CTX *ctx, int checktype)
@@ -140,26 +152,12 @@ int EVP_PKEY_private_check(EVP_PKEY_CTX *ctx)
     return -2;
 }
 
-int EVP_PKEY_pairwise_check(EVP_PKEY_CTX *ctx)
+int EVP_PKEY_check(EVP_PKEY_CTX *ctx)
 {
-    EVP_PKEY *pkey = ctx->pkey;
-    int ok;
-
-    if (pkey == NULL) {
-        ERR_raise(ERR_LIB_EVP, EVP_R_NO_KEY_SET);
-        return 0;
-    }
-
-    if ((ok = try_provided_check(ctx, OSSL_KEYMGMT_SELECT_KEYPAIR,
-                                 OSSL_KEYMGMT_VALIDATE_FULL_CHECK)) != -1)
-        return ok;
-
-    /* not supported for legacy keys */
-    ERR_raise(ERR_LIB_EVP, EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
-    return -2;
+    return EVP_PKEY_pairwise_check(ctx);
 }
 
-int EVP_PKEY_check(EVP_PKEY_CTX *ctx)
+int EVP_PKEY_pairwise_check(EVP_PKEY_CTX *ctx)
 {
     EVP_PKEY *pkey = ctx->pkey;
     int ok;

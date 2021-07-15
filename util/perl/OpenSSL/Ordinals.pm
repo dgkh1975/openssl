@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2018-2020 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2018-2021 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -863,7 +863,7 @@ handled by the caller.  The caller may change this to an actual number.
 =item B<< $item->version >> (read-only)
 
 The version number for this item.  Please note that these version numbers
-have underscore (C<_>) as a separator the the version parts.
+have underscore (C<_>) as a separator for the version parts.
 
 =item B<< $item->exists >> (read-only)
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2019-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -45,6 +45,7 @@ extern "C" {
 # define OSSL_SELF_TEST_DESC_PCT_ECDSA      "ECDSA"
 # define OSSL_SELF_TEST_DESC_PCT_DSA        "DSA"
 # define OSSL_SELF_TEST_DESC_CIPHER_AES_GCM "AES_GCM"
+# define OSSL_SELF_TEST_DESC_CIPHER_AES_ECB "AES_ECB_Decrypt"
 # define OSSL_SELF_TEST_DESC_CIPHER_TDES    "TDES"
 # define OSSL_SELF_TEST_DESC_ASYM_RSA_ENC   "RSA_Encrypt"
 # define OSSL_SELF_TEST_DESC_ASYM_RSA_DEC   "RSA_Decrypt"

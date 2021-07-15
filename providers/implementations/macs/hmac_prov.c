@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2018-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,7 +18,6 @@
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
-#include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
@@ -134,29 +133,53 @@ static void *hmac_dup(void *vsrc)
     return dst;
 }
 
-static size_t hmac_size(void *vmacctx)
+static size_t hmac_size(struct hmac_data_st *macctx)
 {
-    struct hmac_data_st *macctx = vmacctx;
-
     return HMAC_size(macctx->ctx);
 }
 
-static int hmac_init(void *vmacctx)
+static int hmac_block_size(struct hmac_data_st *macctx)
 {
-    struct hmac_data_st *macctx = vmacctx;
-    const EVP_MD *digest;
-    int rv = 1;
+    const EVP_MD *md = ossl_prov_digest_md(&macctx->digest);
 
-    if (!ossl_prov_is_running())
+    if (md == NULL)
         return 0;
+    return EVP_MD_block_size(md);
+}
+
+static int hmac_setkey(struct hmac_data_st *macctx,
+                       const unsigned char *key, size_t keylen)
+{
+    const EVP_MD *digest;
+
+    if (macctx->keylen > 0)
+        OPENSSL_secure_clear_free(macctx->key, macctx->keylen);
+    /* Keep a copy of the key in case we need it for TLS HMAC */
+    macctx->key = OPENSSL_secure_malloc(keylen > 0 ? keylen : 1);
+    if (macctx->key == NULL)
+        return 0;
+    memcpy(macctx->key, key, keylen);
+    macctx->keylen = keylen;
 
     digest = ossl_prov_digest_md(&macctx->digest);
     /* HMAC_Init_ex doesn't tolerate all zero params, so we must be careful */
-    if (macctx->tls_data_size == 0 && digest != NULL)
-        rv = HMAC_Init_ex(macctx->ctx, NULL, 0, digest,
-                          ossl_prov_digest_engine(&macctx->digest));
+    if (key != NULL || (macctx->tls_data_size == 0 && digest != NULL))
+        return HMAC_Init_ex(macctx->ctx, key, keylen, digest,
+                            ossl_prov_digest_engine(&macctx->digest));
+    return 1;
+}
 
-    return rv;
+static int hmac_init(void *vmacctx, const unsigned char *key,
+                     size_t keylen, const OSSL_PARAM params[])
+{
+    struct hmac_data_st *macctx = vmacctx;
+
+    if (!ossl_prov_is_running() || !hmac_set_ctx_params(macctx, params))
+        return 0;
+
+    if (key != NULL && !hmac_setkey(macctx, key, keylen))
+        return 0;
+    return 1;
 }
 
 static int hmac_update(void *vmacctx, const unsigned char *data,
@@ -217,19 +240,27 @@ static int hmac_final(void *vmacctx, unsigned char *out, size_t *outl,
 
 static const OSSL_PARAM known_gettable_ctx_params[] = {
     OSSL_PARAM_size_t(OSSL_MAC_PARAM_SIZE, NULL),
+    OSSL_PARAM_size_t(OSSL_MAC_PARAM_BLOCK_SIZE, NULL),
     OSSL_PARAM_END
 };
-static const OSSL_PARAM *hmac_gettable_ctx_params(ossl_unused void *provctx)
+static const OSSL_PARAM *hmac_gettable_ctx_params(ossl_unused void *ctx,
+                                                  ossl_unused void *provctx)
 {
     return known_gettable_ctx_params;
 }
 
 static int hmac_get_ctx_params(void *vmacctx, OSSL_PARAM params[])
 {
+    struct hmac_data_st *macctx = vmacctx;
     OSSL_PARAM *p;
 
-    if ((p = OSSL_PARAM_locate(params, OSSL_MAC_PARAM_SIZE)) != NULL)
-        return OSSL_PARAM_set_size_t(p, hmac_size(vmacctx));
+    if ((p = OSSL_PARAM_locate(params, OSSL_MAC_PARAM_SIZE)) != NULL
+            && !OSSL_PARAM_set_size_t(p, hmac_size(macctx)))
+        return 0;
+
+    if ((p = OSSL_PARAM_locate(params, OSSL_MAC_PARAM_BLOCK_SIZE)) != NULL
+            && !OSSL_PARAM_set_int(p, hmac_block_size(macctx)))
+        return 0;
 
     return 1;
 }
@@ -243,7 +274,8 @@ static const OSSL_PARAM known_settable_ctx_params[] = {
     OSSL_PARAM_size_t(OSSL_MAC_PARAM_TLS_DATA_SIZE, NULL),
     OSSL_PARAM_END
 };
-static const OSSL_PARAM *hmac_settable_ctx_params(ossl_unused void *provctx)
+static const OSSL_PARAM *hmac_settable_ctx_params(ossl_unused void *ctx,
+                                                  ossl_unused void *provctx)
 {
     return known_settable_ctx_params;
 }
@@ -274,6 +306,9 @@ static int hmac_set_ctx_params(void *vmacctx, const OSSL_PARAM params[])
     OSSL_LIB_CTX *ctx = PROV_LIBCTX_OF(macctx->provctx);
     const OSSL_PARAM *p;
     int flags = 0;
+
+    if (params == NULL)
+        return 1;
 
     if (!ossl_prov_digest_load_from_params(&macctx->digest, params, ctx))
         return 0;

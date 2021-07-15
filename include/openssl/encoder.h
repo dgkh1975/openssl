@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2019-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -31,17 +31,18 @@ OSSL_ENCODER *OSSL_ENCODER_fetch(OSSL_LIB_CTX *libctx, const char *name,
 int OSSL_ENCODER_up_ref(OSSL_ENCODER *encoder);
 void OSSL_ENCODER_free(OSSL_ENCODER *encoder);
 
-const OSSL_PROVIDER *OSSL_ENCODER_provider(const OSSL_ENCODER *encoder);
-const char *OSSL_ENCODER_properties(const OSSL_ENCODER *encoder);
-int OSSL_ENCODER_number(const OSSL_ENCODER *encoder);
+const OSSL_PROVIDER *OSSL_ENCODER_get0_provider(const OSSL_ENCODER *encoder);
+const char *OSSL_ENCODER_get0_properties(const OSSL_ENCODER *encoder);
+const char *OSSL_ENCODER_get0_name(const OSSL_ENCODER *kdf);
+const char *OSSL_ENCODER_get0_description(const OSSL_ENCODER *kdf);
 int OSSL_ENCODER_is_a(const OSSL_ENCODER *encoder, const char *name);
 
 void OSSL_ENCODER_do_all_provided(OSSL_LIB_CTX *libctx,
                                   void (*fn)(OSSL_ENCODER *encoder, void *arg),
                                   void *arg);
-void OSSL_ENCODER_names_do_all(const OSSL_ENCODER *encoder,
-                               void (*fn)(const char *name, void *data),
-                               void *data);
+int OSSL_ENCODER_names_do_all(const OSSL_ENCODER *encoder,
+                              void (*fn)(const char *name, void *data),
+                              void *data);
 const OSSL_PARAM *OSSL_ENCODER_gettable_params(OSSL_ENCODER *encoder);
 int OSSL_ENCODER_get_params(OSSL_ENCODER *encoder, OSSL_PARAM params[]);
 
@@ -82,8 +83,6 @@ OSSL_ENCODER *
 OSSL_ENCODER_INSTANCE_get_encoder(OSSL_ENCODER_INSTANCE *encoder_inst);
 void *
 OSSL_ENCODER_INSTANCE_get_encoder_ctx(OSSL_ENCODER_INSTANCE *encoder_inst);
-const char *
-OSSL_ENCODER_INSTANCE_get_input_type(OSSL_ENCODER_INSTANCE *encoder_inst);
 const char *
 OSSL_ENCODER_INSTANCE_get_output_type(OSSL_ENCODER_INSTANCE *encoder_inst);
 const char *

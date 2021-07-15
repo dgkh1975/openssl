@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2019-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -233,8 +233,8 @@ static int underflow_test(void)
             || !TEST_int_gt(BN_hex2bn(&y1, p521m1), 0)
             || !TEST_int_gt(BN_hex2bn(&z1, p521m1), 0)
             || !TEST_int_gt(BN_hex2bn(&k, "02"), 0)
-            || !TEST_true(ec_GFp_simple_set_Jprojective_coordinates_GFp(grp, P, x1,
-                                                                        y1, z1, ctx))
+            || !TEST_true(ossl_ec_GFp_simple_set_Jprojective_coordinates_GFp(grp, P, x1,
+                                                                             y1, z1, ctx))
             || !TEST_true(EC_POINT_mul(grp, Q, NULL, P, k, ctx))
             || !TEST_true(EC_POINT_get_affine_coordinates(grp, Q, x1, y1, ctx))
             || !TEST_true(EC_POINT_dbl(grp, R, P, ctx))

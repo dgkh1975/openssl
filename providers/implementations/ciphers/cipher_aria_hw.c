@@ -1,5 +1,5 @@
 /*
- * Copyright 2001-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2001-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -18,15 +18,15 @@ static int cipher_hw_aria_initkey(PROV_CIPHER_CTX *dat,
     ARIA_KEY *ks = &adat->ks.ks;
 
     if (dat->enc || (mode != EVP_CIPH_ECB_MODE && mode != EVP_CIPH_CBC_MODE))
-        ret = aria_set_encrypt_key(key, keylen * 8, ks);
+        ret = ossl_aria_set_encrypt_key(key, keylen * 8, ks);
     else
-        ret = aria_set_decrypt_key(key, keylen * 8, ks);
+        ret = ossl_aria_set_decrypt_key(key, keylen * 8, ks);
     if (ret < 0) {
         ERR_raise(ERR_LIB_PROV, PROV_R_KEY_SETUP_FAILED);
         return 0;
     }
     dat->ks = ks;
-    dat->block = (block128_f)aria_encrypt;
+    dat->block = (block128_f)ossl_aria_encrypt;
     return 1;
 }
 

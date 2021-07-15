@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2011-2021 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
@@ -19,19 +19,14 @@
 
 #include "ec_local.h"
 
-int ec_GFp_simple_set_compressed_coordinates(const EC_GROUP *group,
-                                             EC_POINT *point,
-                                             const BIGNUM *x_, int y_bit,
-                                             BN_CTX *ctx)
+int ossl_ec_GFp_simple_set_compressed_coordinates(const EC_GROUP *group,
+                                                  EC_POINT *point,
+                                                  const BIGNUM *x_, int y_bit,
+                                                  BN_CTX *ctx)
 {
     BN_CTX *new_ctx = NULL;
     BIGNUM *tmp1, *tmp2, *x, *y;
     int ret = 0;
-
-#ifndef FIPS_MODULE
-    /* clear error queue */
-    ERR_clear_error();
-#endif
 
     if (ctx == NULL) {
         ctx = new_ctx = BN_CTX_new_ex(group->libctx);
@@ -106,21 +101,24 @@ int ec_GFp_simple_set_compressed_coordinates(const EC_GROUP *group,
             goto err;
     }
 
+    ERR_set_mark();
     if (!BN_mod_sqrt(y, tmp1, group->field, ctx)) {
 #ifndef FIPS_MODULE
         unsigned long err = ERR_peek_last_error();
 
         if (ERR_GET_LIB(err) == ERR_LIB_BN
             && ERR_GET_REASON(err) == BN_R_NOT_A_SQUARE) {
-            ERR_clear_error();
+            ERR_pop_to_mark();
             ERR_raise(ERR_LIB_EC, EC_R_INVALID_COMPRESSED_POINT);
         } else
 #endif
         {
+            ERR_clear_last_mark();
             ERR_raise(ERR_LIB_EC, ERR_R_BN_LIB);
         }
         goto err;
     }
+    ERR_clear_last_mark();
 
     if (y_bit != BN_is_odd(y)) {
         if (BN_is_zero(y)) {
@@ -158,9 +156,9 @@ int ec_GFp_simple_set_compressed_coordinates(const EC_GROUP *group,
     return ret;
 }
 
-size_t ec_GFp_simple_point2oct(const EC_GROUP *group, const EC_POINT *point,
-                               point_conversion_form_t form,
-                               unsigned char *buf, size_t len, BN_CTX *ctx)
+size_t ossl_ec_GFp_simple_point2oct(const EC_GROUP *group, const EC_POINT *point,
+                                    point_conversion_form_t form,
+                                    unsigned char *buf, size_t len, BN_CTX *ctx)
 {
     size_t ret;
     BN_CTX *new_ctx = NULL;
@@ -273,8 +271,9 @@ size_t ec_GFp_simple_point2oct(const EC_GROUP *group, const EC_POINT *point,
     return 0;
 }
 
-int ec_GFp_simple_oct2point(const EC_GROUP *group, EC_POINT *point,
-                            const unsigned char *buf, size_t len, BN_CTX *ctx)
+int ossl_ec_GFp_simple_oct2point(const EC_GROUP *group, EC_POINT *point,
+                                 const unsigned char *buf, size_t len,
+                                 BN_CTX *ctx)
 {
     point_conversion_form_t form;
     int y_bit;

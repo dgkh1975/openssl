@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2017-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -27,19 +27,18 @@
 
 static DH *dh_param_init(OSSL_LIB_CTX *libctx, const DH_NAMED_GROUP *group)
 {
-    DH *dh = dh_new_ex(libctx);
+    DH *dh = ossl_dh_new_ex(libctx);
 
     if (dh == NULL)
         return NULL;
 
     ossl_ffc_named_group_set_pqg(&dh->params, group);
     dh->params.nid = ossl_ffc_named_group_get_uid(group);
-    dh->length = BN_num_bits(dh->params.q);
     dh->dirty_cnt++;
     return dh;
 }
 
-DH *dh_new_by_nid_ex(OSSL_LIB_CTX *libctx, int nid)
+DH *ossl_dh_new_by_nid_ex(OSSL_LIB_CTX *libctx, int nid)
 {
     const DH_NAMED_GROUP *group;
 
@@ -52,10 +51,10 @@ DH *dh_new_by_nid_ex(OSSL_LIB_CTX *libctx, int nid)
 
 DH *DH_new_by_nid(int nid)
 {
-    return dh_new_by_nid_ex(NULL, nid);
+    return ossl_dh_new_by_nid_ex(NULL, nid);
 }
 
-void dh_cache_named_group(DH *dh)
+void ossl_dh_cache_named_group(DH *dh)
 {
     const DH_NAMED_GROUP *group;
 
@@ -76,9 +75,19 @@ void dh_cache_named_group(DH *dh)
             dh->params.q = (BIGNUM *)ossl_ffc_named_group_get_q(group);
         /* cache the nid */
         dh->params.nid = ossl_ffc_named_group_get_uid(group);
-        dh->length = BN_num_bits(dh->params.q);
         dh->dirty_cnt++;
     }
+}
+
+int ossl_dh_is_named_safe_prime_group(const DH *dh)
+{
+    int id = DH_get_nid(dh);
+
+    /*
+     * Exclude RFC5114 groups (id = 1..3) since they do not have
+     * q = (p - 1) / 2
+     */
+    return (id > 3);
 }
 
 int DH_get_nid(const DH *dh)

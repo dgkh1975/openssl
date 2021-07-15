@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2011-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -266,10 +266,13 @@ static int drbg_hash_instantiate(PROV_DRBG *drbg,
 static int drbg_hash_instantiate_wrapper(void *vdrbg, unsigned int strength,
                                          int prediction_resistance,
                                          const unsigned char *pstr,
-                                         size_t pstr_len)
+                                         size_t pstr_len,
+                                         const OSSL_PARAM params[])
 {
     PROV_DRBG *drbg = (PROV_DRBG *)vdrbg;
 
+    if (!ossl_prov_is_running() || !drbg_hash_set_ctx_params(drbg, params))
+        return 0;
     return ossl_prov_drbg_instantiate(drbg, strength, prediction_resistance,
                                       pstr, pstr_len);
 }
@@ -435,14 +438,15 @@ static int drbg_hash_get_ctx_params(void *vdrbg, OSSL_PARAM params[])
     p = OSSL_PARAM_locate(params, OSSL_DRBG_PARAM_DIGEST);
     if (p != NULL) {
         md = ossl_prov_digest_md(&hash->digest);
-        if (md == NULL || !OSSL_PARAM_set_utf8_string(p, EVP_MD_name(md)))
+        if (md == NULL || !OSSL_PARAM_set_utf8_string(p, EVP_MD_get0_name(md)))
             return 0;
     }
 
     return ossl_drbg_get_ctx_params(drbg, params);
 }
 
-static const OSSL_PARAM *drbg_hash_gettable_ctx_params(ossl_unused void *p_ctx)
+static const OSSL_PARAM *drbg_hash_gettable_ctx_params(ossl_unused void *vctx,
+                                                       ossl_unused void *p_ctx)
 {
     static const OSSL_PARAM known_gettable_ctx_params[] = {
         OSSL_PARAM_utf8_string(OSSL_DRBG_PARAM_DIGEST, NULL, 0),
@@ -464,13 +468,13 @@ static int drbg_hash_set_ctx_params(void *vctx, const OSSL_PARAM params[])
 
     md = ossl_prov_digest_md(&hash->digest);
     if (md != NULL) {
-        if ((EVP_MD_flags(md) & EVP_MD_FLAG_XOF) != 0) {
+        if ((EVP_MD_get_flags(md) & EVP_MD_FLAG_XOF) != 0) {
             ERR_raise(ERR_LIB_PROV, PROV_R_XOF_DIGESTS_NOT_ALLOWED);
             return 0;
         }
 
         /* These are taken from SP 800-90 10.1 Table 2 */
-        hash->blocklen = EVP_MD_size(md);
+        hash->blocklen = EVP_MD_get_size(md);
         /* See SP800-57 Part1 Rev4 5.6.1 Table 3 */
         ctx->strength = 64 * (hash->blocklen >> 3);
         if (ctx->strength > 256)
@@ -487,7 +491,8 @@ static int drbg_hash_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     return ossl_drbg_set_ctx_params(ctx, params);
 }
 
-static const OSSL_PARAM *drbg_hash_settable_ctx_params(ossl_unused void *p_ctx)
+static const OSSL_PARAM *drbg_hash_settable_ctx_params(ossl_unused void *vctx,
+                                                       ossl_unused void *p_ctx)
 {
     static const OSSL_PARAM known_settable_ctx_params[] = {
         OSSL_PARAM_utf8_string(OSSL_DRBG_PARAM_PROPERTIES, NULL, 0),

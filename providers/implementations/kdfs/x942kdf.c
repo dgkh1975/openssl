@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2019-2021 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2019, Oracle and/or its affiliates.  All rights reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
@@ -281,7 +281,7 @@ static int x942kdf_hash_kdm(const EVP_MD *kdf_md,
         return 0;
     }
 
-    hlen = EVP_MD_size(kdf_md);
+    hlen = EVP_MD_get_size(kdf_md);
     if (hlen <= 0)
         return 0;
     out_len = (size_t)hlen;
@@ -388,11 +388,12 @@ static size_t x942kdf_size(KDF_X942 *ctx)
         ERR_raise(ERR_LIB_PROV, PROV_R_MISSING_MESSAGE_DIGEST);
         return 0;
     }
-    len = EVP_MD_size(md);
+    len = EVP_MD_get_size(md);
     return (len <= 0) ? 0 : (size_t)len;
 }
 
-static int x942kdf_derive(void *vctx, unsigned char *key, size_t keylen)
+static int x942kdf_derive(void *vctx, unsigned char *key, size_t keylen,
+                          const OSSL_PARAM params[])
 {
     KDF_X942 *ctx = (KDF_X942 *)vctx;
     const EVP_MD *md;
@@ -401,7 +402,7 @@ static int x942kdf_derive(void *vctx, unsigned char *key, size_t keylen)
     unsigned char *der = NULL;
     size_t der_len = 0;
 
-    if (!ossl_prov_is_running())
+    if (!ossl_prov_is_running() || !x942kdf_set_ctx_params(ctx, params))
         return 0;
 
     /*
@@ -471,6 +472,8 @@ static int x942kdf_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     const char *propq = NULL;
     size_t id;
 
+    if (params == NULL)
+        return 1;
     if (!ossl_prov_digest_load_from_params(&ctx->digest, params, provctx))
         return 0;
 
@@ -533,7 +536,8 @@ static int x942kdf_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     return 1;
 }
 
-static const OSSL_PARAM *x942kdf_settable_ctx_params(ossl_unused void *provctx)
+static const OSSL_PARAM *x942kdf_settable_ctx_params(ossl_unused void *ctx,
+                                                     ossl_unused void *provctx)
 {
     static const OSSL_PARAM known_settable_ctx_params[] = {
         OSSL_PARAM_utf8_string(OSSL_KDF_PARAM_PROPERTIES, NULL, 0),
@@ -563,7 +567,8 @@ static int x942kdf_get_ctx_params(void *vctx, OSSL_PARAM params[])
     return -2;
 }
 
-static const OSSL_PARAM *x942kdf_gettable_ctx_params(ossl_unused void *provctx)
+static const OSSL_PARAM *x942kdf_gettable_ctx_params(ossl_unused void *ctx,
+                                                     ossl_unused void *provctx)
 {
     static const OSSL_PARAM known_gettable_ctx_params[] = {
         OSSL_PARAM_size_t(OSSL_KDF_PARAM_SIZE, NULL),

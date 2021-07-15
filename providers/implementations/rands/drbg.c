@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2011-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -303,6 +303,7 @@ static void prov_drbg_nonce_ossl_ctx_free(void *vdngbl)
 }
 
 static const OSSL_LIB_CTX_METHOD drbg_nonce_ossl_ctx_method = {
+    OSSL_LIB_CTX_METHOD_DEFAULT_PRIORITY,
     prov_drbg_nonce_ossl_ctx_new,
     prov_drbg_nonce_ossl_ctx_free,
 };
@@ -364,9 +365,6 @@ int ossl_prov_drbg_instantiate(PROV_DRBG *drbg, unsigned int strength,
     unsigned char *nonce = NULL, *entropy = NULL;
     size_t noncelen = 0, entropylen = 0;
     size_t min_entropy, min_entropylen, max_entropylen;
-
-    if (!ossl_prov_is_running())
-        return 0;
 
     if (strength > drbg->strength) {
         ERR_raise(ERR_LIB_PROV, PROV_R_INSUFFICIENT_DRBG_STRENGTH);
@@ -917,6 +915,9 @@ int ossl_drbg_get_ctx_params(PROV_DRBG *drbg, OSSL_PARAM params[])
 int ossl_drbg_set_ctx_params(PROV_DRBG *drbg, const OSSL_PARAM params[])
 {
     const OSSL_PARAM *p;
+
+    if (params == NULL)
+        return 1;
 
     p = OSSL_PARAM_locate_const(params, OSSL_DRBG_PARAM_RESEED_REQUESTS);
     if (p != NULL && !OSSL_PARAM_get_uint(p, &drbg->reseed_interval))

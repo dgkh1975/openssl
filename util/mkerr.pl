@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 1999-2020 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 1999-2021 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -358,7 +358,7 @@ EOF
             $indent = "  ";
         }
         print OUT <<"EOF";
-int err_load_${lib}_strings_int(void);
+int ossl_err_load_${lib}_strings(void);
 EOF
 
         # If this library doesn't have a public header file, we write all
@@ -459,7 +459,7 @@ extern \"C\" {
 # endif
 int ERR_load_${lib}_strings(void);
 void ERR_unload_${lib}_strings(void);
-void ERR_${lib}_error(int function, int reason, char *file, int line);
+void ERR_${lib}_error(int function, int reason, const char *file, int line);
 # ifdef  __cplusplus
 }
 # endif
@@ -581,7 +581,7 @@ EOF
         if ( $internal ) {
             print OUT <<"EOF";
 
-int err_load_${lib}_strings_int(void)
+int ossl_err_load_${lib}_strings(void)
 {
 #${indent}ifndef OPENSSL_NO_ERR
     if (ERR_reason_error_string(${lib}_str_reasons[0].error) == NULL)
@@ -621,7 +621,7 @@ ${st}void ERR_unload_${lib}_strings(void)
     }
 }
 
-${st}void ERR_${lib}_error(int function, int reason, char *file, int line)
+${st}void ERR_${lib}_error(int function, int reason, const char *file, int line)
 {
     if (lib_code == 0)
         lib_code = ERR_get_next_error_library();

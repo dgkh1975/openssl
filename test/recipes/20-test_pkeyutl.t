@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2018-2020 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2018-2021 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -16,7 +16,7 @@ use OpenSSL::Test::Utils;
 
 setup("test_pkeyutl");
 
-plan tests => 11;
+plan tests => 12;
 
 # For the tests below we use the cert itself as the TBS file
 
@@ -80,7 +80,7 @@ sub tsignverify {
     my $sigfile = basename($privkey, '.pem') . '.sig';
 
     my @args = ();
-    plan tests => 4;
+    plan tests => 5;
 
     @args = ('openssl', 'pkeyutl', '-sign',
              '-inkey', $privkey,
@@ -89,6 +89,15 @@ sub tsignverify {
     push(@args, @extraopts);
     ok(run(app([@args])),
        $testtext.": Generating signature");
+
+    @args = ('openssl', 'pkeyutl', '-sign',
+             '-inkey', $privkey,
+             '-keyform', 'DER',
+             '-out', $sigfile,
+             '-in', $data_to_sign);
+    push(@args, @extraopts);
+    ok(!run(app([@args])),
+       $testtext.": Checking that mismatching keyform fails");
 
     @args = ('openssl', 'pkeyutl', '-verify',
              '-inkey', $privkey,
@@ -99,6 +108,7 @@ sub tsignverify {
        $testtext.": Verify signature with private key");
 
     @args = ('openssl', 'pkeyutl', '-verify',
+             '-keyform', 'PEM',
              '-inkey', $pubkey, '-pubin',
              '-sigfile', $sigfile,
              '-in', $data_to_sign);
@@ -124,6 +134,14 @@ SKIP: {
                     srctop_file("test","testrsa.pem"),
                     srctop_file("test","testrsapub.pem"),
                     "-rawin", "-digest", "sha256");
+    };
+
+    subtest "RSA CLI signature and verification with pkeyopt" => sub {
+        tsignverify("RSA",
+                    srctop_file("test","testrsa.pem"),
+                    srctop_file("test","testrsapub.pem"),
+                    "-rawin", "-digest", "sha256",
+                    "-pkeyopt", "rsa_padding_mode:pss");
     };
 }
 
