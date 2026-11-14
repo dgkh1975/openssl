@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Copyright 2016-2020 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2026 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -8,10 +8,10 @@
 
 #
 # ====================================================================
-# Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
+# Written by Andy Polyakov, @dot-asm, initially for use in the OpenSSL
 # project. The module is, however, dual licensed under OpenSSL and
 # CRYPTOGAMS licenses depending on where you obtain it. For further
-# details see http://www.openssl.org/~appro/cryptogams/.
+# details see https://github.com/dot-asm/cryptogams/.
 # ====================================================================
 #
 # This module implements Poly1305 hash for ARMv8.
@@ -55,7 +55,7 @@ my ($mac,$nonce)=($inp,$len);
 my ($h0,$h1,$h2,$r0,$r1,$s1,$t0,$t1,$d0,$d1,$d2) = map("x$_",(4..14));
 
 $code.=<<___;
-#include "arm_arch.h"
+#include "arch/arm_arch.h"
 
 .text
 
@@ -68,6 +68,8 @@ $code.=<<___;
 .hidden	poly1305_blocks
 .globl	poly1305_emit
 .hidden	poly1305_emit
+
+.extern poly1305_blocks_sve2
 
 .type	poly1305_init,%function
 .align	5
@@ -86,7 +88,7 @@ poly1305_init:
 	ldp	$r0,$r1,[$inp]		// load key
 	mov	$s1,#0xfffffffc0fffffff
 	movk	$s1,#0x0fff,lsl#48
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$r0,$r0			// flip bytes
 	rev	$r1,$r1
 #endif
@@ -97,13 +99,24 @@ poly1305_init:
 
 	tst	w17,#ARMV7_NEON
 
-	adr	$d0,.Lpoly1305_blocks
-	adr	$r0,.Lpoly1305_blocks_neon
-	adr	$d1,.Lpoly1305_emit
-	adr	$r1,.Lpoly1305_emit_neon
+	adrp	$d0,poly1305_blocks
+	add	$d0,$d0,#:lo12:.Lpoly1305_blocks
+	adrp	$r0,poly1305_blocks_neon
+	add	$r0,$r0,#:lo12:.Lpoly1305_blocks_neon
+	adrp	$d1,poly1305_emit
+	add	$d1,$d1,#:lo12:.Lpoly1305_emit
+	adrp	$r1,poly1305_emit_neon
+	add	$r1,$r1,#:lo12:.Lpoly1305_emit_neon
 
 	csel	$d0,$d0,$r0,eq
 	csel	$d1,$d1,$r1,eq
+
+	tst	w17, #ARMV9_SVE2_POLY1305
+
+	adrp	$r0,poly1305_blocks_sve2
+	add	$r0,$r0,#:lo12:poly1305_blocks_sve2
+
+	csel	$d0,$d0,$r0,eq
 
 #ifdef	__ILP32__
 	stp	w12,w13,[$len]
@@ -136,7 +149,7 @@ poly1305_blocks:
 .Loop:
 	ldp	$t0,$t1,[$inp],#16	// load input
 	sub	$len,$len,#16
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$t0,$t0
 	rev	$t1,$t1
 #endif
@@ -204,13 +217,13 @@ poly1305_emit:
 	csel	$h0,$h0,$d0,eq
 	csel	$h1,$h1,$d1,eq
 
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	ror	$t0,$t0,#32		// flip nonce words
 	ror	$t1,$t1,#32
 #endif
 	adds	$h0,$h0,$t0		// accumulate nonce
 	adc	$h1,$h1,$t1
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$h0,$h0			// flip output bytes
 	rev	$h1,$h1
 #endif
@@ -345,7 +358,7 @@ poly1305_blocks_neon:
 	adcs	$h1,$h1,xzr
 	adc	$h2,$h2,xzr
 
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$d0,$d0
 	rev	$d1,$d1
 #endif
@@ -391,7 +404,7 @@ poly1305_blocks_neon:
 	ldp	$d0,$d1,[$inp],#16	// load input
 	sub	$len,$len,#16
 	add	$s1,$r1,$r1,lsr#2	// s1 = r1 + (r1 >> 2)
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$d0,$d0
 	rev	$d1,$d1
 #endif
@@ -442,7 +455,8 @@ poly1305_blocks_neon:
 	ldr	x30,[sp,#8]
 
 	add	$in2,$inp,#32
-	adr	$zeros,.Lzeros
+	adrp	$zeros,.Lzeros
+	add	$zeros,$zeros,:lo12:.Lzeros
 	subs	$len,$len,#64
 	csel	$in2,$zeros,$in2,lo
 
@@ -454,7 +468,8 @@ poly1305_blocks_neon:
 .align	4
 .Leven_neon:
 	add	$in2,$inp,#32
-	adr	$zeros,.Lzeros
+	adrp	$zeros,.Lzeros
+	add	$zeros,$zeros,:lo12:.Lzeros
 	subs	$len,$len,#64
 	csel	$in2,$zeros,$in2,lo
 
@@ -476,7 +491,7 @@ poly1305_blocks_neon:
 	lsl	$padbit,$padbit,#24
 	add	x15,$ctx,#48
 
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	x8,x8
 	rev	x12,x12
 	rev	x9,x9
@@ -512,7 +527,7 @@ poly1305_blocks_neon:
 	ld1	{$S2,$R3,$S3,$R4},[x15],#64
 	ld1	{$S4},[x15]
 
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	x8,x8
 	rev	x12,x12
 	rev	x9,x9
@@ -573,7 +588,7 @@ poly1305_blocks_neon:
 	umull	$ACC1,$IN23_0,${R1}[2]
 	 ldp	x9,x13,[$in2],#48
 	umull	$ACC0,$IN23_0,${R0}[2]
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	 rev	x8,x8
 	 rev	x12,x12
 	 rev	x9,x9
@@ -638,7 +653,7 @@ poly1305_blocks_neon:
 	umlal	$ACC4,$IN01_2,${R2}[0]
 	umlal	$ACC1,$IN01_2,${S4}[0]
 	umlal	$ACC2,$IN01_2,${R0}[0]
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	 rev	x8,x8
 	 rev	x12,x12
 	 rev	x9,x9
@@ -922,13 +937,13 @@ poly1305_emit_neon:
 	csel	$h0,$h0,$d0,eq
 	csel	$h1,$h1,$d1,eq
 
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	ror	$t0,$t0,#32		// flip nonce words
 	ror	$t1,$t1,#32
 #endif
 	adds	$h0,$h0,$t0		// accumulate nonce
 	adc	$h1,$h1,$t1
-#ifdef	__ARMEB__
+#ifdef	__AARCH64EB__
 	rev	$h0,$h0			// flip output bytes
 	rev	$h1,$h1
 #endif
@@ -937,10 +952,12 @@ poly1305_emit_neon:
 	ret
 .size	poly1305_emit_neon,.-poly1305_emit_neon
 
+.rodata
+
 .align	5
 .Lzeros:
 .long	0,0,0,0,0,0,0,0
-.asciz	"Poly1305 for ARMv8, CRYPTOGAMS by <appro\@openssl.org>"
+.asciz	"Poly1305 for ARMv8, CRYPTOGAMS by <https://github.com/dot-asm>"
 .align	2
 ___
 
